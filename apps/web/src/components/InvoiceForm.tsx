@@ -1,12 +1,7 @@
 "use client";
 
 import { useState } from "react";
-
-type LineItem = {
-  description: string;
-  quantity: number;
-  price: number;
-};
+import { LineItem } from "@/types/invoice";
 
 type InvoiceFormProps = {
   initialData: {
@@ -16,7 +11,13 @@ type InvoiceFormProps = {
     totalAmount?: number;
     items?: LineItem[];
   };
-  onSave?: (data: any) => void;
+  onSave?: (data: {
+    invoiceNumber: string;
+    date: string;
+    vendor: string;
+    totalAmount: number;
+    items: LineItem[];
+  }) => void;
 };
 
 export default function InvoiceForm({ initialData, onSave }: InvoiceFormProps) {
@@ -33,12 +34,15 @@ export default function InvoiceForm({ initialData, onSave }: InvoiceFormProps) {
     value: string | number
   ) {
     const updated = [...items];
-    updated[index] = { ...updated[index], [field]: value };
+    updated[index] = { ...updated[index], [field]: value } as LineItem;
     setItems(updated);
   }
 
   function addItem() {
-    setItems([...items, { description: "", quantity: 1, price: 0 }]);
+    setItems([
+      ...items,
+      { description: "", quantity: 1, unitPrice: 0, total: 0 },
+    ]);
   }
 
   function removeItem(index: number) {
@@ -46,7 +50,7 @@ export default function InvoiceForm({ initialData, onSave }: InvoiceFormProps) {
   }
 
   function calculateTotal() {
-    return items.reduce((sum, item) => sum + item.quantity * item.price, 0);
+    return items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
   }
 
   function handleSubmit() {
@@ -97,7 +101,7 @@ export default function InvoiceForm({ initialData, onSave }: InvoiceFormProps) {
       <div>
         <h3 className="font-semibold mb-2">Line Items</h3>
         {items.map((item, index) => (
-          <div key={index} className="grid grid-cols-4 gap-2 mb-2 items-center">
+          <div key={index} className="grid grid-cols-5 gap-2 mb-2 items-center">
             <input
               type="text"
               placeholder="Description"
@@ -118,12 +122,19 @@ export default function InvoiceForm({ initialData, onSave }: InvoiceFormProps) {
             />
             <input
               type="number"
-              placeholder="Price"
-              value={item.price}
+              placeholder="Unit Price"
+              value={item.unitPrice}
               onChange={(e) =>
-                handleItemChange(index, "price", Number(e.target.value))
+                handleItemChange(index, "unitPrice", Number(e.target.value))
               }
               className="border p-2 rounded"
+            />
+            <input
+              type="number"
+              placeholder="Total"
+              value={item.total}
+              readOnly
+              className="border p-2 rounded bg-gray-100"
             />
             <button
               type="button"

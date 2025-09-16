@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import api from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Invoice, LineItem } from "@/types/invoice";
 
 const PdfViewer = dynamic(() => import("@/components/PdfViewer"), {
   ssr: false,
@@ -12,7 +13,7 @@ const PdfViewer = dynamic(() => import("@/components/PdfViewer"), {
 
 export default function Home() {
   const [fileUrl, setFileUrl] = useState<string | null>(null);
-  const [extractedData, setExtractedData] = useState<any>(null);
+  const [extractedData, setExtractedData] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -26,9 +27,13 @@ export default function Home() {
 
     try {
       setLoading(true);
-      const res = await api.post("/invoices/upload?model=groq", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const res = await api.post<Invoice>(
+        "/invoices/upload?model=groq",
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        }
+      );
       setExtractedData(res.data);
     } catch (err) {
       console.error("❌ Upload failed", err);
@@ -58,22 +63,37 @@ export default function Home() {
     }
   }
 
-  function updateField(path: string, value: any) {
-    setExtractedData((prev: any) => {
-      const clone = { ...prev };
+  function updateField(path: string, value: string | number) {
+    setExtractedData((prev) => {
+      if (!prev) return prev;
+      const clone: Invoice = JSON.parse(JSON.stringify(prev));
+
       const keys = path.split(".");
-      let obj = clone;
+      let obj: Record<string, unknown> = clone as unknown as Record<
+        string,
+        unknown
+      >;
+
       for (let i = 0; i < keys.length - 1; i++) {
-        obj = obj[keys[i]];
+        const key = keys[i];
+        if (
+          typeof obj[key] === "object" &&
+          obj[key] !== null &&
+          !Array.isArray(obj[key])
+        ) {
+          obj = obj[key] as Record<string, unknown>;
+        }
       }
+
       obj[keys[keys.length - 1]] = value;
       return clone;
     });
   }
 
   function addLineItem() {
-    setExtractedData((prev: any) => {
-      const clone = { ...prev };
+    setExtractedData((prev) => {
+      if (!prev) return prev;
+      const clone: Invoice = JSON.parse(JSON.stringify(prev));
       clone.invoice.lineItems = clone.invoice.lineItems || [];
       clone.invoice.lineItems.push({
         description: "",
@@ -86,25 +106,41 @@ export default function Home() {
   }
 
   function removeLineItem(index: number) {
-    setExtractedData((prev: any) => {
-      const clone = { ...prev };
-      clone.invoice.lineItems.splice(index, 1);
+    setExtractedData((prev) => {
+      if (!prev) return prev;
+      const clone: Invoice = JSON.parse(JSON.stringify(prev));
+      clone.invoice.lineItems?.splice(index, 1);
       return clone;
     });
   }
 
-  function updateLineItem(index: number, field: string, value: any) {
-    setExtractedData((prev: any) => {
-      const clone = { ...prev };
-      clone.invoice.lineItems[index][field] = value;
+  function updateLineItem(
+    index: number,
+    field: keyof LineItem,
+    value: string | number
+  ) {
+    setExtractedData((prev) => {
+      if (!prev) return prev;
+      const clone: Invoice = JSON.parse(JSON.stringify(prev));
+      if (!clone.invoice.lineItems) return clone;
+
+      const item = clone.invoice.lineItems[index];
+      if (field === "description" && typeof value === "string") {
+        item.description = value;
+      } else if (field === "quantity" && typeof value === "number") {
+        item.quantity = value;
+      } else if (field === "unitPrice" && typeof value === "number") {
+        item.unitPrice = value;
+      } else if (field === "total" && typeof value === "number") {
+        item.total = value;
+      }
 
       // auto-calc total for that row
-      const { quantity, unitPrice } = clone.invoice.lineItems[index];
-      clone.invoice.lineItems[index].total = quantity * unitPrice;
+      item.total = item.quantity * item.unitPrice;
 
       // recalc invoice total
       clone.invoice.total = clone.invoice.lineItems.reduce(
-        (sum: number, item: any) => sum + (item.total || 0),
+        (sum, i) => sum + (i.total || 0),
         0
       );
 
@@ -168,56 +204,46 @@ export default function Home() {
             {/* Line Items */}
             <div>
               <h3 className="font-semibold mt-4">Line Items</h3>
-              {extractedData.invoice?.lineItems?.map(
-                (item: any, index: number) => (
-                  <div key={index} className="grid grid-cols-5 gap-2 mt-2">
-                    <Input
-                      placeholder="Description"
-                      value={item.description}
-                      onChange={(e) =>
-                        updateLineItem(index, "description", e.target.value)
-                      }
-                    />
-                    <Input
-                      type="number"
-                      placeholder="Qty"
-                      value={item.quantity}
-                      onChange={(e) =>
-                        updateLineItem(
-                          index,
-                          "quantity",
-                          Number(e.target.value)
-                        )
-                      }
-                    />
-                    <Input
-                      type="number"
-                      placeholder="Unit Price"
-                      value={item.unitPrice}
-                      onChange={(e) =>
-                        updateLineItem(
-                          index,
-                          "unitPrice",
-                          Number(e.target.value)
-                        )
-                      }
-                    />
-                    <Input
-                      type="number"
-                      placeholder="Total"
-                      value={item.total}
-                      readOnly
-                    />
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      onClick={() => removeLineItem(index)}
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                )
-              )}
+              {extractedData.invoice.lineItems?.map((item, index) => (
+                <div key={index} className="grid grid-cols-5 gap-2 mt-2">
+                  <Input
+                    placeholder="Description"
+                    value={item.description}
+                    onChange={(e) =>
+                      updateLineItem(index, "description", e.target.value)
+                    }
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Qty"
+                    value={item.quantity}
+                    onChange={(e) =>
+                      updateLineItem(index, "quantity", Number(e.target.value))
+                    }
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Unit Price"
+                    value={item.unitPrice}
+                    onChange={(e) =>
+                      updateLineItem(index, "unitPrice", Number(e.target.value))
+                    }
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Total"
+                    value={item.total}
+                    readOnly
+                  />
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={() => removeLineItem(index)}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ))}
               <Button type="button" onClick={addLineItem} className="mt-2">
                 ➕ Add Item
               </Button>

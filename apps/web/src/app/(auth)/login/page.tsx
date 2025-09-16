@@ -28,9 +28,8 @@ export default function LoginPage() {
       const res = await api.post("/auth/login", values);
       localStorage.setItem("token", res.data.access_token);
       router.push("/dashboard");
-    } catch (err: any) {
+    } catch (err) {
       console.error("Login failed", err);
-      alert(err.response?.data?.message || "Invalid credentials");
     }
   }
 

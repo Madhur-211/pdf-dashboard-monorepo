@@ -27,9 +27,8 @@ export default function SignupPage() {
     try {
       await api.post("/auth/signup", values);
       router.push("/login");
-    } catch (err: any) {
+    } catch (err) {
       console.error("Signup failed", err);
-      alert(err.response?.data?.message || "Signup error");
     }
   }
 
